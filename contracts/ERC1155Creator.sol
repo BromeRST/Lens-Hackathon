@@ -1,38 +1,31 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract ERC1155Creator is ERC1155, Ownable {
     address public Usage;
-    string private _uri;
     uint256 private id;
-
-    /*     mapping (address => UserIds) private userToId;
-
-    struct UserIds {
-        uint256[] Ids;
-    } */
+    mapping (uint256 => uint256) idToTimestamp;
+    mapping (uint256 => uint256) idToNFTminted;
+    mapping (uint256 => uint256) idToCap;
+    mapping (uint256 => string) idToUri;
+    
+    event IDCreated (uint256 _id);
 
     constructor() ERC1155("") {}
 
-    function generateNFTs(uint256 _amount)
-        external
-        returns (uint256 _idGenerated)
-    {
-        _mint(msg.sender, id, _amount, "");
-        _idGenerated = id;
-        id++;
-        return _idGenerated;
+    function mint(uint256 _id) external {
+        require(block.timestamp <= idToTimestamp[_id], "minting expired");
+        require(balanceOf(msg.sender, _id) == 0, "already minted");
+        require(idToNFTminted[_id] < idToCap[_id], "all supply have been minted");
+        _mint(msg.sender, _id, 1, "");
+        idToNFTminted[_id]++;
     }
 
-    function uri(uint256) public view override returns (string memory) {
-        return _uri;
-    }
-
-    function setUri(string calldata __uri) external onlyOwner {
-        _uri = __uri;
+    function uri(uint256 _id) public view override returns (string memory) {
+        return idToUri[_id];
     }
 
     function burnFrom(address _account, uint256 _id) external {
@@ -40,17 +33,27 @@ contract ERC1155Creator is ERC1155, Ownable {
         _burn(_account, _id, 1);
     }
 
-    function transferFrom(
-        address _from,
-        address _to,
-        uint256 _id,
-        uint256 _amount,
-        bytes memory _data
-    ) external {
-        _safeTransferFrom(_from, _to, _id, _amount, _data);
-    }
-
     function setAddresses(address _Usage) external onlyOwner {
         Usage = _Usage;
+    }
+
+    function generateNFT(uint256 _expiringTimeInDays, uint256 _cap, string calldata _uri) external {
+        uint256 _idGenerated = id;
+        require(bytes(idToUri[_idGenerated]).length == 0, "cannot set URI twice");
+        id++;
+        idToTimestamp[_idGenerated] = block.timestamp + _expiringTimeInDays;
+        idToCap[_idGenerated] = _cap;
+        idToUri[_idGenerated] = _uri;
+        emit IDCreated(_idGenerated);
+    }
+
+    function getCountForId (uint256 _id) external view returns(uint256 _count) {
+        _count = idToNFTminted[_id];
+        return _count;
+    }
+
+    function getCapForId (uint256 _id) external view returns(uint256 _cap) {
+        _cap = idToCap[_id];
+        return _cap;
     }
 }
